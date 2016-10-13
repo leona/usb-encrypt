@@ -4,6 +4,6 @@ Cross platform USB encryption implementation written in Golang using AES 128 bit
 Build options in terminal
 
 1. ```make build```
-2. make build-windows
-3. make build-linux
-4. make build-mac
+2. ```make build-windows```
+3. ```make build-linux```
+4. ```make build-mac```
