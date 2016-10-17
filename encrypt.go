@@ -5,17 +5,17 @@ import(
     "fmt"
     "path"
     "github.com/neoh/usb-encrypt/utilities"
-
 )
 
 const vaultDir = "vault"
 
 func main() {
     currentDir := uti.GetCurrentPath()
-    vaultName := uti.TakeInput("Enter vault name: ")
+    vaultName := uti.TakeInput("Enter vault name: ") // validate alphanumeric
     rootVault := path.Join(currentDir, vaultDir)
     vaultPath :=uti. TakeInput("Enter directory to encrypt from: ")
     vaultTarPath := vaultPath + ".tar.gz"
+    encryptedOutput := path.Join(rootVault, vaultName + ".aes")
     
     if len(vaultPath) > len(currentDir) {
         if vaultPath[0:len(currentDir)] == currentDir {
@@ -36,10 +36,12 @@ func main() {
     
     handler := uti.Compressor{}
     handler.Init(vaultPath, vaultTarPath)
-    defer os.Remove(vaultTarPath)
+    //defer os.Remove(vaultTarPath)
     
     fmt.Println("Encrypting: ", vaultTarPath)
-    uti.Crypt(vaultTarPath, vaultKey, path.Join(rootVault, vaultName + ".aes"))
     
+    uti.Crypt(vaultTarPath, vaultKey, encryptedOutput)
+    
+    fmt.Println("Encrypted output:", encryptedOutput)
     fmt.Println("Finished")
 }

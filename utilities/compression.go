@@ -12,92 +12,73 @@ import (
 
 
 type Compressor struct {
-    TarWriter *tar.Writer
+    tarWriter *tar.Writer
+    pathInput string
     pathCurrent string
+    pathDestination string  
+    pathTree []fileData
+    destinationFile *os.File
+    gzipWriter *gzip.Writer
 }
 
 
 func (self *Compressor) Init(inputPath string, destinationPath string) {
-    destinationFile, err := os.Create(destinationPath)
-    
-    if err != nil {
-        panic(err.Error())
-    }
-    
-    defer destinationFile.Close()
-    
     self.pathCurrent = GetCurrentPath()
+    self.pathDestination = destinationPath
+    self.pathInput = inputPath
     
-    var fileWriter io.WriteCloser = destinationFile
+    self.createTarballHandler()
+
+    self.pathTree = GetPathTree(self.pathInput)
+    self.compressTree()
     
-    tarfile, err := os.Create(destinationPath)
-    
-    if err != nil {
-        panic(err.Error())
-    }
-    
-    defer tarfile.Close()
-    
-    if strings.HasSuffix(destinationPath, ".gz") {
-        fileWriter = gzip.NewWriter(tarfile) 
-        defer fileWriter.Close()    
-    }
-    
-    self.TarWriter = tar.NewWriter(fileWriter)
-    defer self.TarWriter.Close()
-    
-    self.pathWalker(inputPath, inputPath)
+    defer self.destinationFile.Close()
+    defer self.gzipWriter.Close()   
+    defer self.tarWriter.Close()
 }
 
-func (self *Compressor) pathWalker(inputPath string, startPath string) {
-    pathWorking, err := os.Open(inputPath)
-
-    if err != nil {
-        panic(err.Error())
-    }
-    
-    defer pathWorking.Close()
-    
-    files, err := pathWorking.Readdir(0)  
-    
-    if err != nil {
-        panic(err.Error())
-    }
-    
-    for _, fileWorking := range files {
-        if fileWorking.IsDir() {
-            self.pathWalker(path.Join(inputPath, fileWorking.Name()), startPath)
-            continue
-        }
-        
-        file, err := os.Open(path.Join(pathWorking.Name(), fileWorking.Name()))
-        
-        if err != nil {
-            panic(err.Error())
-        }
-    
-        defer file.Close()
-        
-        header := new(tar.Header)
-        
-        header.Name     = strings.Replace(strings.Replace(file.Name(), `\`, "/", -1), BasePath(startPath) + "/", "", -1)
-        header.Mode     = int64(fileWorking.Mode())
-        header.ModTime  = fileWorking.ModTime()
-        header.Typeflag = tar.TypeReg
-        header.Size     = fileWorking.Size()
-
-        fmt.Println("Compressing file: ", strings.Replace(file.Name(), self.pathCurrent, "", -1))
-
-        if err := self.TarWriter.WriteHeader(header); err != nil {
-            panic(err.Error())
-        }
-        
-        if _, err := io.Copy(self.TarWriter, file); err != nil {
-            panic(err.Error())
-        }
+func (self *Compressor) compressTree() {
+    for _, file := range self.pathTree {
+        self.addTarballItem(file)
     }
 }
 
+func (self *Compressor) addTarballItem(file fileData) {
+    fileHandler, err := os.Open(file.path)
+    
+    if err != nil {
+        panic(err)
+    }
+    
+    header := new(tar.Header)
+    header.Name     = strings.Replace(strings.Replace(file.path, `\`, "/", -1), BasePath(self.pathInput) + "/", "", -1)
+    header.Mode     = int64(file.info.Mode())
+    header.ModTime  = file.info.ModTime()
+    header.Typeflag = tar.TypeReg
+    header.Size     = file.info.Size()
+    
+    fmt.Println("Compressing file: ", strings.Replace(strings.Replace(file.path, `\`, "/", -1), BasePath(self.pathInput) + "/", "", -1))
+
+    if err := self.tarWriter.WriteHeader(header); err != nil {
+        panic(err.Error())
+    }
+    
+    if _, err := io.Copy(self.tarWriter, fileHandler); err != nil {
+        panic(err.Error())
+    }
+} 
+
+func (self *Compressor) createTarballHandler() {
+    var err error
+    self.destinationFile, err = os.Create(self.pathDestination)
+    
+    if err != nil {
+        panic(err.Error())
+    }
+    
+    self.gzipWriter = gzip.NewWriter(self.destinationFile) 
+    self.tarWriter = tar.NewWriter(self.gzipWriter)
+}
 
 func Decompress(inputPath string) {
     workingFile, err := os.Open(inputPath)

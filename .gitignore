@@ -1,1 +1,9 @@
 ideas
+decrypt
+encrypt
+./encrypt
+./decrypt
+test.go
+vault
+vault/*
+vault/
