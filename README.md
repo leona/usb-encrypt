@@ -13,6 +13,3 @@ Instructions
 1. Place contents of ```./bin``` folder in the root directory of your USB stick.
 2. Run the encrypt executable and follow instructions to encrypt a folder from your hard disk onto the USB.
 3. Run the decrypt executable to decrypt it back onto your hard drive.
-
-What it does?
-...
