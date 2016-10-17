@@ -1,4 +1,4 @@
-package uti
+package encryption
 
 import (
     "crypto/aes"
@@ -9,6 +9,8 @@ import (
     "io"
     "os"
     "bytes"
+    "github.com/neoh/usb-encrypt/uti"
+
 )
 
 func Crypt(inputPath string, key string, outputPath string) {
@@ -18,7 +20,7 @@ func Crypt(inputPath string, key string, outputPath string) {
         panic(err.Error())
     }
     
-    key = GetMD5(key)
+    key = uti.GetMD5(key)
     
     block, err := aes.NewCipher([]byte(key))
     
@@ -58,7 +60,7 @@ func Decrypt(inputPath string, key string, outputPath string) (string, error) {
         panic(err.Error())
     }
 
-    key = GetMD5(key)
+    key = uti.GetMD5(key)
     
     block, err := aes.NewCipher([]byte(key))
     

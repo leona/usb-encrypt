@@ -3,6 +3,7 @@ package uti
 import(
     "os"
     "fmt"
+    "time"
     "bufio"
     "strings"
     "encoding/hex"
@@ -92,4 +93,8 @@ func PromptDriveSelection(msg string) string {
     }
     
     return drives[driveIndex] + ":"
+}
+
+func GetUnix() int32 {
+    return int32(time.Now().Unix())
 }

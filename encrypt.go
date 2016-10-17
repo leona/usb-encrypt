@@ -4,7 +4,9 @@ import(
     "os"
     "fmt"
     "path"
-    "github.com/neoh/usb-encrypt/utilities"
+    "github.com/neoh/usb-encrypt/uti"
+    "github.com/neoh/usb-encrypt/encryption"
+    "github.com/neoh/usb-encrypt/compression"
 )
 
 const vaultDir = "vault"
@@ -34,13 +36,15 @@ func main() {
         panic(err.Error())
     }
     
-    handler := uti.Compressor{}
+    timestamp := uti.GetUnix()
+    handler := compression.Handler{}
     handler.Init(vaultPath, vaultTarPath)
-    //defer os.Remove(vaultTarPath)
+    defer os.Remove(vaultTarPath)
     
+    fmt.Println("Compression took", uti.GetUnix() - timestamp, "seconds")
     fmt.Println("Encrypting: ", vaultTarPath)
     
-    uti.Crypt(vaultTarPath, vaultKey, encryptedOutput)
+    encryption.Crypt(vaultTarPath, vaultKey, encryptedOutput)
     
     fmt.Println("Encrypted output:", encryptedOutput)
     fmt.Println("Finished")

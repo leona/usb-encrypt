@@ -7,7 +7,9 @@ import(
     "path"
     "strings"
     "runtime"
-    "github.com/neoh/usb-encrypt/utilities"
+    "github.com/neoh/usb-encrypt/uti"
+    "github.com/neoh/usb-encrypt/encryption"
+    "github.com/neoh/usb-encrypt/compression"
 )
 
 const vaultDir = "vault"
@@ -61,12 +63,12 @@ func mountVault(vaultName string, vaultKey string, endPath string) {
         panic(err.Error())
     }
             
-    if _, err := uti.Decrypt(decryptFile, vaultKey, outputTarFile); err != nil {
+    if _, err := encryption.Decrypt(decryptFile, vaultKey, outputTarFile); err != nil {
         panic(err.Error())
     }
 
     fmt.Println("Decompressing tarball")
-    uti.Decompress(outputTarFile)
+    compression.Decompress(outputTarFile)
     defer os.Remove(outputTarFile)
     
     osSpecificActions(endPath)

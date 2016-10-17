@@ -1,4 +1,4 @@
-package uti
+package compression
 
 import (
     "archive/tar"
@@ -6,69 +6,123 @@ import (
     "fmt"
     "io"
     "os"
+    "sync"
     "strings"
     "path"
+    "github.com/neoh/usb-encrypt/pathTreeBuilder"
+    "github.com/neoh/usb-encrypt/uti"
 )
 
-
-type Compressor struct {
+type Handler struct {
     tarWriter *tar.Writer
     pathInput string
     pathCurrent string
     pathDestination string  
-    pathTree []fileData
+    pathTree []pathTreeBuilder.FileData
     destinationFile *os.File
     gzipWriter *gzip.Writer
+    jobIteration int
+    pathTreeLength int
+    readJobs chan pathTreeBuilder.FileData
+    writeJobs chan writeData
 }
 
+type writeData struct {
+    fileHandler *os.File
+    header *tar.Header
+}
 
-func (self *Compressor) Init(inputPath string, destinationPath string) {
-    self.pathCurrent = GetCurrentPath()
+const maxJobs = 100000000
+const maxProcesses = 5
+var wg sync.WaitGroup
+
+func (self *Handler) Init(inputPath string, destinationPath string) {
+    self.readJobs = make(chan pathTreeBuilder.FileData, maxJobs)
+    self.writeJobs = make(chan writeData)
+    
+    self.pathCurrent = uti.GetCurrentPath()
     self.pathDestination = destinationPath
     self.pathInput = inputPath
+    self.pathTree = pathTreeBuilder.GetPathTree(self.pathInput)
+    self.pathTreeLength = len(self.pathTree)
     
     self.createTarballHandler()
-
-    self.pathTree = GetPathTree(self.pathInput)
-    self.compressTree()
+    self.startWorkers()
+    
+    wg.Wait()
     
     defer self.destinationFile.Close()
     defer self.gzipWriter.Close()   
     defer self.tarWriter.Close()
 }
 
-func (self *Compressor) compressTree() {
-    for _, file := range self.pathTree {
-        self.addTarballItem(file)
+func (self *Handler) startWorkers() {
+    self.jobIteration = maxProcesses
+    
+    if self.jobIteration > self.pathTreeLength {
+        self.jobIteration = self.pathTreeLength
+    }
+    
+    go func() {
+        for job := range self.writeJobs {
+            self.writeTarHeader(job.header, job.fileHandler)
+            wg.Done()
+        }
+    }()
+    
+    for id := 0; id < maxProcesses; id++ {
+        go self.worker(id)
+        
+        if id < self.pathTreeLength {
+            wg.Add(1)
+            self.readJobs <- self.pathTree[id]
+        }
     }
 }
 
-func (self *Compressor) addTarballItem(file fileData) {
-    fileHandler, err := os.Open(file.path)
+func (self *Handler) worker(id int) {
+    for job := range self.readJobs {
+        self.addTarballItem(job)
+        
+        if self.jobIteration < self.pathTreeLength {
+            self.jobIteration = self.jobIteration + 1
+            self.readJobs <- self.pathTree[self.jobIteration - 1]
+        } else {
+            wg.Done()
+        }
+    }
+}
+
+func (self *Handler) addTarballItem(file pathTreeBuilder.FileData) {
+    fileHandler, err := os.Open(file.Path)
     
     if err != nil {
         panic(err)
     }
     
     header := new(tar.Header)
-    header.Name     = strings.Replace(strings.Replace(file.path, `\`, "/", -1), BasePath(self.pathInput) + "/", "", -1)
-    header.Mode     = int64(file.info.Mode())
-    header.ModTime  = file.info.ModTime()
+    header.Name     = strings.Replace(strings.Replace(file.Path, `\`, "/", -1), uti.BasePath(self.pathInput) + "/", "", -1)
+    header.Mode     = int64(file.Info.Mode())
+    header.ModTime  = file.Info.ModTime()
     header.Typeflag = tar.TypeReg
-    header.Size     = file.info.Size()
+    header.Size     = file.Info.Size()
     
-    fmt.Println("Compressing file: ", strings.Replace(strings.Replace(file.path, `\`, "/", -1), BasePath(self.pathInput) + "/", "", -1))
+    wg.Add(1)
+    self.writeJobs <- writeData{ fileHandler, header }
+} 
 
+func (self *Handler) writeTarHeader(header *tar.Header, fileHandler *os.File) {
     if err := self.tarWriter.WriteHeader(header); err != nil {
+        fmt.Println("Header name:", header.Name, "mode:", header.Mode, "modtime:", header.ModTime, "typeflag:", header.Typeflag, "size:", header.Size)
         panic(err.Error())
     }
     
     if _, err := io.Copy(self.tarWriter, fileHandler); err != nil {
         panic(err.Error())
     }
-} 
+}
 
-func (self *Compressor) createTarballHandler() {
+func (self *Handler) createTarballHandler() {
     var err error
     self.destinationFile, err = os.Create(self.pathDestination)
     
@@ -89,8 +143,8 @@ func Decompress(inputPath string) {
     
     defer workingFile.Close()
     
-    pathCurrent := BasePath(inputPath)
-    fmt.Println("Work path: " + pathCurrent)
+    pathCurrent := uti.BasePath(inputPath)
+
     var fileReader io.ReadCloser = workingFile
     
     if strings.HasSuffix(inputPath, ".gz") {
@@ -115,7 +169,7 @@ func Decompress(inputPath string) {
         }
         
         fileName := path.Join(pathCurrent, header.Name)
-        filePath := BasePath(fileName)
+        filePath := uti.BasePath(fileName)
 
         if err := os.MkdirAll(filePath, os.FileMode(0755)); err != nil {
             panic(err.Error())
