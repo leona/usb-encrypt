@@ -56,9 +56,9 @@ func (self *Handler) Init(inputPath string, destinationPath string) {
     
     wg.Wait()
 
-    defer self.destinationFile.Close()
-    defer self.gzipWriter.Close()   
-    defer self.tarWriter.Close()
+    self.destinationFile.Close()
+    self.gzipWriter.Close()   
+    self.tarWriter.Close()
 }
 
 func (self *Handler) walkPath() {
@@ -148,13 +148,11 @@ func Decompress(inputPath string) {
 
     var fileReader io.ReadCloser = workingFile
     
-    if strings.HasSuffix(inputPath, ".gz") {
-        if fileReader, err = gzip.NewReader(workingFile); err != nil {
-            panic(err.Error())
-        }
-        
-        defer fileReader.Close()
+    if fileReader, err = gzip.NewReader(workingFile); err != nil {
+        panic(err.Error())
     }
+    
+    defer fileReader.Close()
     
     tarBallReader := tar.NewReader(fileReader)
     
@@ -177,7 +175,6 @@ func Decompress(inputPath string) {
         }
             
         if header.Typeflag == tar.TypeReg {
-            fmt.Println("Untarring :", fileName)
             writer, err := os.Create(fileName)
             
             if err != nil {

@@ -53,7 +53,6 @@ func GetCurrentPath() string {
     return currentDir
 }
 
-
 func BasePath(path string) string {
     path = strings.Replace(path, `\`, "/", -1)
     split := strings.Split(path, `/`)

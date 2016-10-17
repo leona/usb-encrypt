@@ -56,7 +56,7 @@ func mountVault(vaultName string, vaultKey string, endPath string) {
     pathCurrent := uti.GetCurrentPath()
     
     decryptFile := path.Join(pathCurrent, vaultDir, vaultName + ".aes")
-    outputTarFile := path.Join(endPath, vaultName + ".tar.gz")
+    outputTarFile := path.Join(endPath, vaultName)
     fmt.Println("Decrypting tarball")
     
     if err := os.MkdirAll(endPath, os.FileMode(0755)); err != nil {
