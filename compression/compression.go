@@ -3,13 +3,13 @@ package compression
 import (
     "archive/tar"
     "compress/gzip"
+    "path/filepath"
     "fmt"
     "io"
     "os"
     "sync"
     "strings"
     "path"
-    "github.com/neoh/usb-encrypt/pathTreeBuilder"
     "github.com/neoh/usb-encrypt/uti"
 )
 
@@ -18,12 +18,11 @@ type Handler struct {
     pathInput string
     pathCurrent string
     pathDestination string  
-    pathTree []pathTreeBuilder.FileData
     destinationFile *os.File
     gzipWriter *gzip.Writer
     jobIteration int
     pathTreeLength int
-    readJobs chan pathTreeBuilder.FileData
+    readJobs chan fileData
     writeJobs chan writeData
 }
 
@@ -32,36 +31,51 @@ type writeData struct {
     header *tar.Header
 }
 
+type fileData struct {
+    Path string
+    Info os.FileInfo
+}
+
 const maxJobs = 100000000
-const maxProcesses = 5
+const maxProcesses = 1
 var wg sync.WaitGroup
 
 func (self *Handler) Init(inputPath string, destinationPath string) {
-    self.readJobs = make(chan pathTreeBuilder.FileData, maxJobs)
+    self.readJobs = make(chan fileData, maxJobs)
     self.writeJobs = make(chan writeData)
     
     self.pathCurrent = uti.GetCurrentPath()
     self.pathDestination = destinationPath
     self.pathInput = inputPath
-    self.pathTree = pathTreeBuilder.GetPathTree(self.pathInput)
-    self.pathTreeLength = len(self.pathTree)
+
+    wg.Add(1)
+    go self.walkPath()
     
     self.createTarballHandler()
     self.startWorkers()
     
     wg.Wait()
-    
+
     defer self.destinationFile.Close()
     defer self.gzipWriter.Close()   
     defer self.tarWriter.Close()
 }
 
+func (self *Handler) walkPath() {
+    filepath.Walk(self.pathInput, func(path string, file os.FileInfo, err error) error {
+        if !file.IsDir() {
+            wg.Add(1)
+            self.readJobs <- fileData{ path, file }
+        }
+            
+        return nil
+    })
+    
+    wg.Done()
+}
+
 func (self *Handler) startWorkers() {
     self.jobIteration = maxProcesses
-    
-    if self.jobIteration > self.pathTreeLength {
-        self.jobIteration = self.pathTreeLength
-    }
     
     go func() {
         for job := range self.writeJobs {
@@ -72,28 +86,16 @@ func (self *Handler) startWorkers() {
     
     for id := 0; id < maxProcesses; id++ {
         go self.worker(id)
-        
-        if id < self.pathTreeLength {
-            wg.Add(1)
-            self.readJobs <- self.pathTree[id]
-        }
     }
 }
 
 func (self *Handler) worker(id int) {
     for job := range self.readJobs {
         self.addTarballItem(job)
-        
-        if self.jobIteration < self.pathTreeLength {
-            self.jobIteration = self.jobIteration + 1
-            self.readJobs <- self.pathTree[self.jobIteration - 1]
-        } else {
-            wg.Done()
-        }
     }
 }
 
-func (self *Handler) addTarballItem(file pathTreeBuilder.FileData) {
+func (self *Handler) addTarballItem(file fileData) {
     fileHandler, err := os.Open(file.Path)
     
     if err != nil {
@@ -107,7 +109,6 @@ func (self *Handler) addTarballItem(file pathTreeBuilder.FileData) {
     header.Typeflag = tar.TypeReg
     header.Size     = file.Info.Size()
     
-    wg.Add(1)
     self.writeJobs <- writeData{ fileHandler, header }
 } 
 
